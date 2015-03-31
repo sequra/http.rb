@@ -1,3 +1,5 @@
+# coding: utf-8
+
 require "support/http_handling_shared"
 require "support/dummy_server"
 require "support/ssl_helper"
@@ -9,7 +11,7 @@ RSpec.describe HTTP::Client do
 
   StubbedClient = Class.new(HTTP::Client) do
     def make_request(request, options)
-      stubs.fetch(request.uri.to_s) { super(request, options) }
+      stubs.fetch(request.uri) { super(request, options) }
     end
 
     def stubs
@@ -17,7 +19,10 @@ RSpec.describe HTTP::Client do
     end
 
     def stub(stubs)
-      @stubs = stubs
+      @stubs = stubs.each_with_object({}) do |(k, v), o|
+        o[HTTP::URI.parse k] = v
+      end
+
       self
     end
   end
@@ -72,6 +77,15 @@ RSpec.describe HTTP::Client do
 
       expect { client.get("http://example.com/") }
         .to raise_error(HTTP::Redirector::TooManyRedirectsError)
+    end
+
+    it "works with non-ASCII URIs" do
+      client = StubbedClient.new(:follow => true).stub(
+        "http://example.com/"      => redirect_response("/könig"),
+        "http://example.com/könig" => simple_response("OK")
+      )
+
+      expect(client.get("http://example.com/").to_s).to eq "OK"
     end
   end
 
@@ -154,6 +168,11 @@ RSpec.describe HTTP::Client do
   end
 
   describe "#request" do
+    it "works with non-ASCII URIs" do
+      client = HTTP::Client.new
+      expect { client.get "#{dummy.endpoint}/könig" }.not_to raise_error
+    end
+
     context "with explicitly given `Host` header" do
       let(:headers) { {"Host" => "another.example.com"} }
       let(:client)  { described_class.new :headers => headers }

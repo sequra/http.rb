@@ -1,11 +1,12 @@
+require "base64"
+require "time"
+
 require "http/errors"
 require "http/headers"
 require "http/request/caching"
 require "http/request/writer"
 require "http/version"
-require "base64"
-require "uri"
-require "time"
+require "http/uri"
 
 module HTTP
   class Request
@@ -70,7 +71,7 @@ module HTTP
     # :nodoc:
     def initialize(verb, uri, headers = {}, proxy = {}, body = nil, version = "1.1") # rubocop:disable ParameterLists
       @verb   = verb.to_s.downcase.to_sym
-      @uri    = uri.is_a?(URI) ? uri : URI(uri.to_s)
+      @uri    = HTTP::URI.parse uri
       @scheme = @uri.scheme && @uri.scheme.to_s.downcase.to_sym
 
       fail(UnsupportedMethodError, "unknown method: #{verb}") unless METHODS.include?(@verb)
@@ -86,8 +87,7 @@ module HTTP
 
     # Returns new Request with updated uri
     def redirect(uri, verb = @verb)
-      uri = @uri.merge uri.to_s
-      req = self.class.new(verb, uri, headers, proxy, body, version)
+      req = self.class.new(verb, @uri.join(uri), headers, proxy, body, version)
       req["Host"] = req.uri.host
       req
     end
@@ -157,11 +157,11 @@ module HTTP
     #
     # @return [String]
     def default_host
-      if PORTS[@scheme] == @uri.port
-        @uri.host
-      else
-        "#{@uri.host}:#{@uri.port}"
+      if @uri.port && PORTS[@scheme] != @uri.port
+        return "#{@uri.host}:#{@uri.port}"
       end
+
+      @uri.host
     end
   end
 end
